@@ -171,7 +171,21 @@ void ymodem_rx_put(uint8_t *buf, uint16_t rx_sz)
         Ymod_EnterUpgrade();   /* 复位状态机 + 延时 300ms + 应答 'C' */
         return;
     }
-
+		
+		if(ymod_rx_buf[0]== 0x01 && ymod_rx_buf[1]== 0xA5  && ymod_rx_buf[2]== 0xA5)
+	{
+		if(ymod_rx_buf[3] == 0x01)
+		{
+			_PUTOUT(0xF7);HAL_Delay(3);
+			_PUTOUT(0x01);HAL_Delay(3);
+			_PUTOUT(0xA5);HAL_Delay(3);
+			_PUTOUT(0xA5);HAL_Delay(3);
+			_PUTOUT(0xC4);HAL_Delay(3);
+			_PUTOUT(0x8F);HAL_Delay(3);			
+			return;
+		}
+	}
+		 
     switch (Ymod.ym_rx_status)
     {
     /* ================= 空闲：等待文件信息包（序号 00） ================= */
