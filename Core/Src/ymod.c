@@ -48,6 +48,46 @@ static uint16_t CRC16 = 0;
 static void iap_erase_app(void);
 static void (*boot_entry)(void);
 
+
+
+/**
+ * @brief  写 IAP 状态标志（解锁->擦页->半字编程->上锁->回读校验）
+ * @param  state: 状态字，如 0x04 = 跳转 APP
+ * @retval 0=成功, 1=失败
+ * @note   单个半字是原子写入，无多字段掉电窗口；
+ *         写完如需立即生效，接 NVIC_SystemReset() 复位后走 IAP 判断
+ */
+uint8_t IAP_SetState(uint16_t state)
+{
+    FLASH_EraseInitTypeDef erase;
+    uint32_t pageError = 0;
+
+    if (HAL_FLASH_Unlock() != HAL_OK)
+        return 1;
+
+    erase.TypeErase   = FLASH_TYPEERASE_PAGES;
+    erase.PageAddress = FLASH_IAP_SATE_PAGE;
+    erase.NbPages     = 1;
+    if (HAL_FLASHEx_Erase(&erase, &pageError) != HAL_OK) {
+        HAL_FLASH_Lock();
+        return 1;
+    }
+
+    if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, FLASH_IAP_SATE_ADDR, state) != HAL_OK) {
+        HAL_FLASH_Lock();
+        return 1;
+    }
+
+    HAL_FLASH_Lock();
+
+    /* 回读校验 */
+    if (*(__IO uint16_t *)FLASH_IAP_SATE_ADDR != state)
+        return 1;
+
+    return 0;
+}
+
+
 void Ymod_Init(void)
 {
     Ymod.Read_Data_32_CRC = 0xffffffff;
@@ -71,6 +111,7 @@ void Ymod_Init(void)
 uint8_t Ymod_CheckUpgradeCmd(uint8_t *buf, uint16_t len)
 {
     if (buf == NULL || len < 8) return 0;
+    
     if (buf[0] == YMOD_CMD_HEAD && buf[3] == YMOD_CMD_FUNC &&
         buf[6] == YMOD_CMD_RSV  && buf[7] == YMOD_CMD_TAIL)
     {
@@ -86,9 +127,11 @@ uint8_t Ymod_CheckUpgradeCmd(uint8_t *buf, uint16_t len)
 void Ymod_EnterUpgrade(void)
 {
     Ymod_Init();
+    _PUTOUT(CNC);
+    IAP_SetState(0x02);
     ymod_in_upgrade = 1;
     HAL_Delay(300);
-    _PUTOUT(CNC);
+//    _PUTOUT(CNC);
 }
 
 /**
@@ -109,6 +152,7 @@ void Ymod_RxCallback(uint8_t *data, uint16_t len)
     memcpy((void *)ymod_rx_buf, data, len);
     ymod_rx_len = len;
     ymod_rx_ready = 1;
+    
 }
 
 /**
@@ -121,6 +165,18 @@ void Ymod_Poll(void)
     int len;
     if (ymod_rx_ready)
     {
+        if(ymod_rx_buf[0]== 0x01 && ymod_rx_buf[1]== 0xA5  && ymod_rx_buf[2]== 0xA5)
+        {
+            if(ymod_rx_buf[3] == 0x01)
+            {
+                _PUTOUT(0xF7);HAL_Delay(3);
+                _PUTOUT(0x01);HAL_Delay(3);
+                _PUTOUT(0xA5);HAL_Delay(3);
+                _PUTOUT(0xA5);HAL_Delay(3);
+                _PUTOUT(0xC4);HAL_Delay(3);
+                _PUTOUT(0x8F);HAL_Delay(3);
+            }
+        }
         ymod_rx_ready = 0;
         if (ymod_in_upgrade)
         {
@@ -171,21 +227,7 @@ void ymodem_rx_put(uint8_t *buf, uint16_t rx_sz)
         Ymod_EnterUpgrade();   /* 复位状态机 + 延时 300ms + 应答 'C' */
         return;
     }
-		
-		if(ymod_rx_buf[0]== 0x01 && ymod_rx_buf[1]== 0xA5  && ymod_rx_buf[2]== 0xA5)
-	{
-		if(ymod_rx_buf[3] == 0x01)
-		{
-			_PUTOUT(0xF7);HAL_Delay(3);
-			_PUTOUT(0x01);HAL_Delay(3);
-			_PUTOUT(0xA5);HAL_Delay(3);
-			_PUTOUT(0xA5);HAL_Delay(3);
-			_PUTOUT(0xC4);HAL_Delay(3);
-			_PUTOUT(0x8F);HAL_Delay(3);			
-			return;
-		}
-	}
-		 
+//     
     switch (Ymod.ym_rx_status)
     {
     /* ================= 空闲：等待文件信息包（序号 00） ================= */
@@ -200,6 +242,7 @@ void ymodem_rx_put(uint8_t *buf, uint16_t rx_sz)
                 HAL_Delay(350);
                 _PUTOUT(ACK);
                 HAL_Delay(400);
+                IAP_SetState(0x03);
                 iap_load_app(IAP_APP_ADDR);
                 /* 跳转失败（App 无效）才会执行到这里 */
                 _PUTOUT(CAN);

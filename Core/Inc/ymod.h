@@ -18,13 +18,16 @@ extern "C" {
 
 #include "main.h"
 
+#define FLASH_IAP_SATE_PAGE   ((uint32_t)0x08003C00)  /* 0x08003FF0 所在页首地址 */
+#define FLASH_IAP_SATE_ADDR   ((uint32_t)0x08003FF0)
+
 /* App 区起始地址、总大小、Flash 页大小 */
 #define IAP_APP_ADDR        0x08004000U
 #define IAP_APP_SIZE        0x00004000U
 #define IAP_FLASH_PAGE_SIZE 0x00000400U
 
 /* 上电后等待升级命令的监听窗口（毫秒），超时且 App 有效则跳转 */
-#define IAP_LISTEN_MS       10000U
+#define IAP_LISTEN_MS       3000U
 /* 升级过程中收不到数据时重发字符 'C' 的超时（毫秒） */
 #define YMOD_C_TIMEOUT_MS   3000U
 
@@ -97,6 +100,7 @@ void     _PUTOUT(uint8_t data);
 void     iap_write_appbin(uint32_t appxaddr, uint8_t *appbuf, uint32_t appsize);
 void     Ymod_Send_Start(void);
 void     Ymod_Send_Buff(uint8_t *Ymodbuff);
+uint8_t IAP_SetState(uint16_t state);
 
 #ifdef __cplusplus
 }

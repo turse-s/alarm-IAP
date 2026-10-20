@@ -16,6 +16,41 @@
 #include "usart.h"
 #include "ymod.h"
 
+
+IWDG_HandleTypeDef hiwdg;
+
+/* IWDG init function */
+void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_256;
+  hiwdg.Init.Window = 4095;
+  hiwdg.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
+
+}
+
+void FLASH_ReadState()
+{
+
+    
+}
+
+
 /* 私有函数声明 */
 void SystemClock_Config(void);
 
@@ -27,9 +62,11 @@ int main(void)
 {
     uint32_t boot_tick;
     uint32_t c_tick;
+    uint16_t iap_state;
 
     /* 复位所有外设，初始化 Flash 接口和 SysTick 滴答定时器 */
     HAL_Init();
+    MX_IWDG_Init();
 
     /* 配置系统时钟：HSE 8MHz 经 PLL 6 倍频 = 48MHz */
     SystemClock_Config();
@@ -39,40 +76,29 @@ int main(void)
     RS485_Init(&huart1);
     RS485_Set_Callback(Ymod_RxCallback);
     RS485_Start_Receive();
-
-    if (IAP_App_IsValid())
-    {
-        _PUTOUT(CNC);
-        /* App 有效：打开监听窗口，期间只识别升级握手命令 */
-        boot_tick = HAL_GetTick();
-        c_tick = boot_tick;
-        while (HAL_GetTick() - boot_tick < IAP_LISTEN_MS)
-        {
-            Ymod_Poll();
-            if (Ymod_IsInUpgrade())
-            {
-                break;
-            }
-            
-        }
-
-        /* 未收到升级命令：跳转 App（跳转失败则继续进入升级模式） */
-        if (!Ymod_IsInUpgrade())
-        {
-            iap_load_app(IAP_APP_ADDR);
-        }
+    
+    iap_state    = *(__IO uint16_t *)FLASH_IAP_SATE_ADDR;
+    
+    if (iap_state == 0x04) {
+        iap_load_app(IAP_APP_ADDR);
     }
-
-    /* App 无效或收到升级命令：进入 Ymodem 升级模式 */
-    if (!Ymod_IsInUpgrade())
-    {
-        Ymod_EnterUpgrade();
-    }
+    
+    
+    IAP_SetState(0x01);
+     _PUTOUT(CNC);
 
     /* 升级主循环：收包处理写 Flash，超时重发 'C' */
+    c_tick = HAL_GetTick();
     while (1)
     {
+        HAL_IWDG_Refresh(&hiwdg);
         Ymod_Poll();
+        if (!Ymod_IsInUpgrade()) {
+            if (HAL_GetTick() - c_tick >= IAP_LISTEN_MS) {
+                c_tick = HAL_GetTick();
+                _PUTOUT(CNC);                          /* 待机态：每 100ms 一次 */
+            }
+        } 
     }
 }
 

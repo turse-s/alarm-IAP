@@ -160,7 +160,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 void MX_USART1_UART_Init(void)
 {
     huart1.Instance = USART1;
-    huart1.Init.BaudRate = 115200;                   /* 波特率 115200 */
+    huart1.Init.BaudRate = 9600;                   /* 波特率 115200 */
     huart1.Init.WordLength = UART_WORDLENGTH_8B;     /* 8 位数据位 */
     huart1.Init.StopBits = UART_STOPBITS_1;          /* 1 位停止位 */
     huart1.Init.Parity = UART_PARITY_NONE;           /* 无校验 */
@@ -200,7 +200,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
         HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
         /* USART1 中断：抢占优先级 5，子优先级 0，并使能 */
-				HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+        HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
         HAL_NVIC_EnableIRQ(USART1_IRQn);
     }
 }
